@@ -75,6 +75,62 @@ EOF
 	install_log_generator
 }
 
+function enable_auto_generation() {
+	echo ""
+	echo "=== Włączanie automatycznego generowania logów ==="
+	
+	# Tworzymy systemd service
+	sudo tee /etc/systemd/system/audit-log-generator.service > /dev/null <<'SERVICE_EOF'
+[Unit]
+Description=Generator logów audytu dla szkoleń
+After=auditd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/audit-log-generator.sh 20
+StandardOutput=journal
+StandardError=journal
+SERVICE_EOF
+	
+	# Tworzymy systemd timer (uruchamia co 5 minut)
+	sudo tee /etc/systemd/system/audit-log-generator.timer > /dev/null <<'TIMER_EOF'
+[Unit]
+Description=Automatyczne generowanie logów audytu (co 5 min)
+After=auditd.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+	
+	# Włączenie timera
+	sudo systemctl daemon-reload
+	sudo systemctl enable audit-log-generator.timer
+	sudo systemctl start audit-log-generator.timer
+	
+	echo "✓ Automatyczne generowanie włączone (20 zdarzeń co 5 minut)"
+	echo ""
+	echo "Status timera:"
+	sudo systemctl status audit-log-generator.timer --no-pager -l | head -10
+	echo ""
+	echo "Następne uruchomienie:"
+	systemctl list-timers audit-log-generator.timer --no-pager
+}
+
+function disable_auto_generation() {
+	echo "=== Wyłączanie automatycznego generowania ==="
+	sudo systemctl stop audit-log-generator.timer 2>/dev/null || true
+	sudo systemctl disable audit-log-generator.timer 2>/dev/null || true
+	sudo rm -f /etc/systemd/system/audit-log-generator.service
+	sudo rm -f /etc/systemd/system/audit-log-generator.timer
+	sudo systemctl daemon-reload
+	echo "✓ Automatyczne generowanie wyłączone"
+}
+
 function install_log_generator() {
 	echo ""
 	echo "=== Instalacja generatora logów szkoleniowych ==="
@@ -177,6 +233,21 @@ GENERATOR_EOF
 	# Generujemy początkowe zdarzenia
 	echo "Generowanie początkowych zdarzeń demonstracyjnych..."
 	sudo /usr/local/bin/audit-log-generator.sh 30
+	
+	# Pytamy czy włączyć automatyczne generowanie
+	echo ""
+	echo "=========================================="
+	echo "Czy włączyć automatyczne generowanie logów w tle?"
+	echo "(Rekomendowane dla środowiska szkoleniowego)"
+	echo "=========================================="
+	read -p "Automatyczne generowanie [T/n]? " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[TtYy]$ ]] || [[ -z $REPLY ]]; then
+		enable_auto_generation
+	else
+		echo "Pominięto automatyczne generowanie."
+		echo "Możesz włączyć później: $0 --enable-auto"
+	fi
 }
 
 function remove_auditd() {
@@ -241,7 +312,9 @@ case "$1" in
 		echo "  sudo tail -f /var/log/audit/audit.log # Podgląd na żywo"
 		echo ""
 		echo "Generator logów szkoleniowych:"
-		echo "  sudo /usr/local/bin/audit-log-generator.sh"
+		echo "  sudo /usr/local/bin/audit-log-generator.sh        # Manualne generowanie"
+		echo "  $0 --enable-auto                                  # Włącz auto-generowanie"
+		echo "  $0 --disable-auto                                 # Wyłącz auto-generowanie"
 		;;
 	--generate)
 		COUNT=${2:-50}
@@ -251,14 +324,27 @@ case "$1" in
 		fi
 		sudo /usr/local/bin/audit-log-generator.sh "$COUNT"
 		;;
+	--enable-auto)
+		if [ ! -f /usr/local/bin/audit-log-generator.sh ]; then
+			echo "Błąd: Generator nie jest zainstalowany. Uruchom najpierw: $0 --install"
+			exit 1
+		fi
+		enable_auto_generation
+		;;
+	--disable-auto)
+		disable_auto_generation
+		;;
 	--remove)
+		disable_auto_generation
 		remove_auditd
 		;;
 	*)
-		echo "Użycie: $0 --install | --generate [liczba] | --remove"
+		echo "Użycie: $0 --install | --generate [liczba] | --enable-auto | --disable-auto | --remove"
 		echo ""
 		echo "  --install          Instaluje auditd i generator logów"
 		echo "  --generate [N]     Generuje N przykładowych zdarzeń (domyślnie 50)"
+		echo "  --enable-auto      Włącza automatyczne generowanie (20 zdarzeń co 5 min)"
+		echo "  --disable-auto     Wyłącza automatyczne generowanie"
 		echo "  --remove           Usuwa auditd całkowicie"
 		exit 1
 		;;
@@ -447,6 +533,111 @@ Usuwa wszystkie ślady instalacji.
 
 ---
 
+## Wyjaśnienie funkcji enable_auto_generation()
+
+### Tworzenie systemd service
+
+```bash
+sudo tee /etc/systemd/system/audit-log-generator.service
+```
+
+**Zawartość service:**
+```ini
+[Unit]
+Description=Generator logów audytu (szkoleniowy)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/audit-log-generator.sh 20
+```
+
+- `Type=oneshot`: Jednorazowe uruchomienie (zakończenie po działaniu)
+- `ExecStart`: Generuje **20 zdarzeń** przy każdym wywołaniu
+
+### Tworzenie systemd timer
+
+```bash
+sudo tee /etc/systemd/system/audit-log-generator.timer
+```
+
+**Zawartość timer:**
+```ini
+[Unit]
+Description=Automatyczne generowanie logów audytu (co 5 min)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+```
+
+- `OnBootSec=2min`: Pierwsze uruchomienie 2 minuty po starcie systemu
+- `OnUnitActiveSec=5min`: Kolejne uruchomienia **co 5 minut**
+- `timers.target`: Automatyczne uruchamianie timera przy boocie
+
+### Aktywacja
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable audit-log-generator.timer
+sudo systemctl start audit-log-generator.timer
+```
+
+- `daemon-reload`: Przeładowanie konfiguracji systemd (nowe pliki)
+- `enable`: Timer uruchamia się przy każdym boot
+- `start`: Natychmiastowe uruchomienie timera
+
+### Wynik
+
+```
+✓ Automatyczne generowanie włączone (20 zdarzeń co 5 minut)
+```
+
+Generator działa w tle: **20 zdarzeń co 5 minut = 288 zdarzeń dziennie**.
+
+---
+
+## Wyjaśnienie funkcji disable_auto_generation()
+
+### Zatrzymanie timera
+
+```bash
+sudo systemctl stop audit-log-generator.timer
+sudo systemctl disable audit-log-generator.timer
+```
+
+- Zatrzymuje timer (nie będzie już wywoływał generatora)
+- Wyłącza autostart przy boot
+
+### Czyszczenie plików
+
+```bash
+sudo rm -f /etc/systemd/system/audit-log-generator.service
+sudo rm -f /etc/systemd/system/audit-log-generator.timer
+```
+
+Usuwa pliki service i timer z systemd.
+
+### Przeładowanie systemd
+
+```bash
+sudo systemctl daemon-reload
+```
+
+Systemd ponownie skanuje katalogi (przestanie widzieć usunięte pliki).
+
+### Wynik
+
+```
+✓ Automatyczne generowanie wyłączone i usunięte
+```
+
+Generator nie będzie już działał w tle. Nadal można używać ręcznie: `sudo /usr/local/bin/audit-log-generator.sh N`
+
+---
+
 ## Użycie skryptu
 
 ### Instalacja Auditd z generatorem
@@ -488,6 +679,51 @@ Generowanie początkowych zdarzeń demonstracyjnych...
 sudo /usr/local/bin/audit-log-generator.sh 100
 ```
 
+### Automatyczne generowanie w tle
+
+```bash
+# Włączenie automatycznego generowania
+./install-auditd.sh --enable-auto
+```
+
+**Co się dzieje:**
+- Tworzy systemd service: `audit-log-generator.service`
+- Tworzy systemd timer: `audit-log-generator.timer`
+- Timer uruchamia generator **co 5 minut**
+- Każde uruchomienie generuje **20 zdarzeń**
+- Pierwsze uruchomienie 2 minuty po starcie systemu
+
+**Wynik:**
+```
+✓ Automatyczne generowanie włączone (20 zdarzeń co 5 minut)
+
+Status timera:
+● audit-log-generator.timer - Automatyczne generowanie logów audytu (co 5 min)
+     Loaded: loaded
+     Active: active (waiting)
+
+Następne uruchomienie:
+NEXT                         LEFT          LAST PASSED  UNIT
+Wed 2026-02-11 12:20:00 UTC  4min 23s left -    -       audit-log-generator.timer
+```
+
+**Sprawdzenie statusu:**
+```bash
+# Status timera
+systemctl status audit-log-generator.timer
+
+# Lista timerów
+systemctl list-timers audit-log-generator.timer
+
+# Historia uruchomień
+journalctl -u audit-log-generator.service -n 50
+```
+
+**Wyłączenie:**
+```bash
+./install-auditd.sh --disable-auto
+```
+
 ### Przeglądanie logów audytu
 
 #### Wszystkie zdarzenia z dzisiaj
@@ -524,6 +760,134 @@ sudo aureport --executable  # Wykonane programy
 ```bash
 sudo tail -f /var/log/audit/audit.log
 ```
+
+---
+
+### Diagnostyka automatycznego generowania
+
+#### Sprawdzenie czy timer jest aktywny
+
+```bash
+systemctl is-enabled audit-log-generator.timer
+systemctl is-active audit-log-generator.timer
+```
+
+**Wynik (jeśli włączony):**
+```
+enabled
+active
+```
+
+#### Status szczegółowy timera
+
+```bash
+systemctl status audit-log-generator.timer
+```
+
+**Przykładowy wynik:**
+```
+● audit-log-generator.timer - Automatyczne generowanie logów audytu (co 5 min)
+     Loaded: loaded (/etc/systemd/system/audit-log-generator.timer; enabled; vendor preset: enabled)
+     Active: active (waiting) since Wed 2026-02-11 12:00:00 UTC; 15min ago
+    Trigger: Wed 2026-02-11 12:20:00 UTC; 4min 23s left
+   Triggers: ● audit-log-generator.service
+
+Feb 11 12:00:00 ubuntu systemd[1]: Started Automatyczne generowanie logów audytu (co 5 min).
+```
+
+**Interpretacja:**
+- `Active: active (waiting)`: Timer działa, czeka na następne uruchomienie
+- `Trigger: ... 4min 23s left`: Kolejne uruchomienie za 4min 23s
+
+#### Lista wszystkich timerów
+
+```bash
+systemctl list-timers
+```
+
+Znajdź wpis `audit-log-generator.timer` z kolumnami:
+- **NEXT**: Kiedy następne uruchomienie
+- **LEFT**: Za ile czasu
+- **LAST**: Kiedy ostatnie uruchomienie
+- **PASSED**: Ile czasu temu
+
+#### Historia uruchomień generatora
+
+```bash
+# Ostatnie 20 uruchomień
+journalctl -u audit-log-generator.service -n 20
+
+# Z datami ostatnie 2 godziny
+journalctl -u audit-log-generator.service --since "2 hours ago"
+
+# Z datami od konkretnego momentu
+journalctl -u audit-log-generator.service --since "2026-02-11 10:00:00"
+```
+
+**Przykładowy log:**
+```
+Feb 11 12:00:03 ubuntu audit-log-generator.sh[1234]: [SZKOLENIE] Wygenerowano dostęp do: /etc/shadow
+Feb 11 12:00:04 ubuntu audit-log-generator.sh[1234]: [SZKOLENIE] Wykonano polecenie: hostname
+Feb 11 12:00:06 ubuntu systemd[1]: audit-log-generator.service: Deactivated successfully.
+Feb 11 12:00:06 ubuntu systemd[1]: Finished Generator logów audytu (szkoleniowy).
+```
+
+#### Ręczne uruchomienie service (testowanie)
+
+```bash
+sudo systemctl start audit-log-generator.service
+```
+
+Natychmiast generuje 20 zdarzeń bez czekania na timer.
+
+#### Zmiana częstotliwości generowania
+
+```bash
+# Edycja timera (zmiana z 5min na inną wartość)
+sudo systemctl edit --full audit-log-generator.timer
+```
+
+Zmień linię `OnUnitActiveSec=5min` na:
+- `OnUnitActiveSec=1min` - co minutę (intensywne)
+- `OnUnitActiveSec=10min` - co 10 minut (rzadkie)
+- `OnUnitActiveSec=1h` - co godzinę (bardzo rzadkie)
+
+Po zapisaniu:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart audit-log-generator.timer
+```
+
+#### Rozwiązywanie problemów
+
+**Problem: Timer nie generuje zdarzeń**
+
+Sprawdź:
+```bash
+# 1. Czy timer jest aktywny
+systemctl status audit-log-generator.timer
+
+# 2. Czy generator istnieje
+ls -la /usr/local/bin/audit-log-generator.sh
+
+# 3. Czy ma uprawnienia wykonywalne
+stat /usr/local/bin/audit-log-generator.sh | grep Access
+
+# 4. Ostatni błąd service
+journalctl -u audit-log-generator.service -n 1 -p err
+```
+
+**Problem: Service kończy się błędem**
+
+```bash
+# Pełne logi ostatniego uruchomienia
+journalctl -u audit-log-generator.service -n 50 --no-pager
+
+# Ręczne uruchomienie generatora (zobacz błędy)
+sudo /usr/local/bin/audit-log-generator.sh 5
+```
+
+---
 
 ### Deinstalacja
 
