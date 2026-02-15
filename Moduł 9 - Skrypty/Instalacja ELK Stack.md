@@ -25,31 +25,33 @@ Skrypt zawiera dwie główne funkcje:
 
 ## Pełny skrypt
 
+
 ```bash
 #!/bin/bash
+
 set -e
 
 ELASTIC_VERSION="8.x"
 
 function install_elasticsearch() {
-	echo "=== Instalacja Elasticsearch ==="
-	
-	# Krok 1: Instalacja wymaganych pakietów
-	sudo apt-get update
-	sudo apt-get install -y apt-transport-https wget gpg
-	
-	# Krok 2: Dodanie klucza GPG Elastic
-	wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
-	
-	# Krok 3: Dodanie repozytorium Elastic
-	echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/${ELASTIC_VERSION}/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-${ELASTIC_VERSION}.list
-	
-	# Krok 4: Instalacja Elasticsearch
-	sudo apt-get update
-	sudo apt-get install -y elasticsearch
-	
-	# Krok 5: Konfiguracja z włączonym security
-	sudo tee /etc/elasticsearch/elasticsearch.yml > /dev/null <<EOF
+echo "=== Instalacja Elasticsearch ==="
+
+# Krok 1: Instalacja wymaganych pakietów
+sudo apt-get update
+sudo apt-get install -y apt-transport-https wget gpg
+
+# Krok 2: Dodanie klucza GPG Elastic
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
+
+# Krok 3: Dodanie repozytorium Elastic
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/${ELASTIC_VERSION}/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-${ELASTIC_VERSION}.list
+
+# Krok 4: Instalacja Elasticsearch
+sudo apt-get update
+sudo apt-get install -y elasticsearch
+
+# Krok 5: Konfiguracja z włączonym security
+sudo tee /etc/elasticsearch/elasticsearch.yml > /dev/null <<EOF
 # Konfiguracja dla środowiska szkoleniowego z włączonym security
 cluster.name: elasticsearch
 node.name: node-1
@@ -67,79 +69,82 @@ xpack.security.enrollment.enabled: true
 xpack.security.http.ssl.enabled: false
 xpack.security.transport.ssl.enabled: false
 EOF
-	
-	# Krok 6: Uruchomienie Elasticsearch
-	sudo systemctl daemon-reload
-	sudo systemctl enable elasticsearch
-	sudo systemctl start elasticsearch
-	
-	echo "✓ Elasticsearch zainstalowany!"
-	echo "  Czekam 30 sekund na uruchomienie..."
-	sleep 30
-	
-	# Krok 7: Generowanie haseł dla użytkowników
-	echo "=== Konfiguracja użytkowników Elasticsearch ==="
-	
-	# Generujemy hasło dla elastic (admin backup)
-	sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic -b > /tmp/elastic-pass.txt 2>&1
-	ELASTIC_PASSWORD=$(grep "New value:" /tmp/elastic-pass.txt | awk '{print $3}')
-	
-	# Generujemy hasło dla kibana_system (połączenie Kibana->ES)
-	sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u kibana_system -b > /tmp/kibana-pass.txt 2>&1
-	KIBANA_PASSWORD=$(grep "New value:" /tmp/kibana-pass.txt | awk '{print $3}')
-	
-	# Czekamy aż Elasticsearch będzie gotowy do przyjęcia API calls
-	echo "Czekam na gotowość Elasticsearch API..."
-	sleep 10
-	
-	# Tworzymy użytkownika "szkolenie" z hasłem "szkolenie" (dla uczestników)
-	echo "Tworzenie użytkownika szkoleniowego..."
-	curl -X POST "http://localhost:9200/_security/user/szkolenie" \
-	  -u "elastic:$ELASTIC_PASSWORD" \
-	  -H "Content-Type: application/json" \
-	  -d '{
-	    "password": "szkolenie",
-	    "roles": ["superuser"],
-	    "full_name": "Użytkownik Szkoleniowy"
-	  }' 2>/dev/null
-	
-	echo ""
-	echo "✓ Użytkownicy skonfigurowani!"
-	echo ""
-	echo "=========================================="
-	echo "DANE LOGOWANIA DLA UCZESTNIKÓW:"
-	echo "=========================================="
-	echo "Login:    szkolenie"
-	echo "Hasło:    szkolenie"
-	echo "=========================================="
-	echo ""
-	echo "Hasło administratora elastic: $ELASTIC_PASSWORD"
-	echo "(zapisz w bezpiecznym miejscu)"
-	echo ""
-	
-	# Zapisanie hasła elastic do pliku tymczasowego
-	echo "$ELASTIC_PASSWORD" | sudo tee /tmp/elastic-admin-pass.txt > /dev/null
-	echo "$KIBANA_PASSWORD" | sudo tee /tmp/kibana-system-pass.txt > /dev/null
+
+# Krok 6: Uruchomienie Elasticsearch
+sudo systemctl daemon-reload
+sudo systemctl enable elasticsearch
+sudo systemctl start elasticsearch
+
+echo "✓ Elasticsearch zainstalowany!"
+echo " Czekam 30 sekund na uruchomienie..."
+sleep 30
+
+# Krok 7: Generowanie haseł dla użytkowników
+echo "=== Konfiguracja użytkowników Elasticsearch ==="
+
+# Generujemy hasło dla elastic (admin backup)
+sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic -b > /tmp/elastic-pass.txt 2>&1
+ELASTIC_PASSWORD=$(grep "New value:" /tmp/elastic-pass.txt | awk '{print $3}')
+
+# Generujemy hasło dla kibana_system (połączenie Kibana->ES)
+sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u kibana_system -b > /tmp/kibana-pass.txt 2>&1
+KIBANA_PASSWORD=$(grep "New value:" /tmp/kibana-pass.txt | awk '{print $3}')
+
+# Czekamy aż Elasticsearch będzie gotowy do przyjęcia API calls
+echo "Czekam na gotowość Elasticsearch API..."
+sleep 10
+
+# Tworzymy użytkownika "szkolenie" z hasłem "szkolenie" (dla uczestników)
+echo "Tworzenie użytkownika szkoleniowego..."
+curl -X POST "http://localhost:9200/_security/user/szkolenie" \
+-u "elastic:$ELASTIC_PASSWORD" \
+-H "Content-Type: application/json" \
+-d '{
+"password": "szkolenie",
+"roles": ["superuser"],
+"full_name": "Użytkownik Szkoleniowy"
+}' 2>/dev/null
+
+echo ""
+echo "✓ Użytkownicy skonfigurowani!"
+echo ""
+echo "=========================================="
+echo "DANE LOGOWANIA DLA UCZESTNIKÓW:"
+echo "=========================================="
+echo "Login: szkolenie"
+echo "Hasło: szkolenie"
+echo "=========================================="
+echo ""
+echo "Hasło administratora elastic: $ELASTIC_PASSWORD"
+echo "(zapisz w bezpiecznym miejscu)"
+echo ""
+
+# Zapisanie hasła elastic do pliku tymczasowego
+echo "$ELASTIC_PASSWORD" | sudo tee /tmp/elastic-admin-pass.txt > /dev/null
+echo "$KIBANA_PASSWORD" | sudo tee /tmp/kibana-system-pass.txt > /dev/null
 }
 
 function install_kibana() {
-	echo "=== Instalacja Kibana ==="
-	
-	# Krok 1: Instalacja Kibana (repozytorium już dodane przez Elasticsearch)
-	sudo apt-get install -y kibana
-	
-	# Krok 2: Pobranie hasła Kibana z pliku tymczasowego
-	KIBANA_PASSWORD=$(sudo cat /tmp/kibana-system-pass.txt)
-	
-	# Krok 3: Generowanie encryption key dla Kibana (wymagane dla Fleet)
-	ENCRYPTION_KEY=$(openssl rand -hex 32)
-	
-	# Krok 4: Konfiguracja z security
-	sudo tee /etc/kibana/kibana.yml > /dev/null <<EOF
+echo "=== Instalacja Kibana ==="
+
+# Krok 1: Instalacja Kibana (repozytorium już dodane przez Elasticsearch)
+sudo apt-get install -y kibana
+
+# Krok 2: Pobranie hasła Kibana z pliku tymczasowego
+KIBANA_PASSWORD=$(sudo cat /tmp/kibana-system-pass.txt)
+
+# Krok 3: Generowanie encryption key dla Kibana (wymagane dla Fleet)
+ENCRYPTION_KEY=$(openssl rand -hex 32)
+
+# Krok 4: Pobranie adresu IP serwera
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
+# Krok 5: Konfiguracja z security
+sudo tee /etc/kibana/kibana.yml > /dev/null <<EOF
 # Konfiguracja dla środowiska szkoleniowego z security
 server.port: 5601
 server.host: "0.0.0.0"
-server.publicBaseUrl: "http://\$(hostname -I | awk '{print \$1}'):5601"
+server.publicBaseUrl: "http://$SERVER_IP:5601"
 
 # Połączenie z Elasticsearch (z autentykacją)
 elasticsearch.hosts: ["http://localhost:9200"]
@@ -151,108 +156,109 @@ xpack.encryptedSavedObjects.encryptionKey: "$ENCRYPTION_KEY"
 xpack.security.encryptionKey: "$ENCRYPTION_KEY"
 xpack.reporting.encryptionKey: "$ENCRYPTION_KEY"
 EOF
-	
-	# Krok 5: Uruchomienie Kibana
-	sudo systemctl daemon-reload
-	sudo systemctl enable kibana
-	sudo systemctl start kibana
-	
-	echo "✓ Kibana zainstalowana!"
-	echo "  Czekam 30 sekund na uruchomienie..."
-	sleep 30
+
+# Krok 6: Uruchomienie Kibana
+sudo systemctl daemon-reload
+sudo systemctl enable kibana
+sudo systemctl start kibana
+
+echo "✓ Kibana zainstalowana!"
+echo " Czekam 30 sekund na uruchomienie..."
+sleep 30
 }
 
 function remove_elk() {
-	echo "=== Deinstalacja ELK Stack ==="
-	
-	# Zatrzymanie usług
-	sudo systemctl stop kibana || true
-	sudo systemctl stop elasticsearch || true
-	sudo systemctl disable kibana || true
-	sudo systemctl disable elasticsearch || true
-	
-	# Odinstalowanie pakietów
-	sudo apt-get purge -y elasticsearch kibana
-	sudo apt-get autoremove -y
-	
-	# Usunięcie repozytoriów i kluczy
-	sudo rm -f /etc/apt/sources.list.d/elastic-*.list
-	sudo rm -f /usr/share/keyrings/elasticsearch-keyring.gpg
-	
-	# Usunięcie danych i konfiguracji
-	sudo rm -rf /etc/elasticsearch
-	sudo rm -rf /var/lib/elasticsearch
-	sudo rm -rf /var/log/elasticsearch
-	sudo rm -rf /etc/kibana
-	sudo rm -rf /var/lib/kibana
-	sudo rm -rf /var/log/kibana
-	
-	echo "✓ ELK Stack został całkowicie usunięty!"
+echo "=== Deinstalacja ELK Stack ==="
+
+# Zatrzymanie usług
+sudo systemctl stop kibana || true
+sudo systemctl stop elasticsearch || true
+sudo systemctl disable kibana || true
+sudo systemctl disable elasticsearch || true
+
+# Odinstalowanie pakietów
+sudo apt-get purge -y elasticsearch kibana
+sudo apt-get autoremove -y
+
+# Usunięcie repozytoriów i kluczy
+sudo rm -f /etc/apt/sources.list.d/elastic-*.list
+sudo rm -f /usr/share/keyrings/elasticsearch-keyring.gpg
+
+# Usunięcie danych i konfiguracji
+sudo rm -rf /etc/elasticsearch
+sudo rm -rf /var/lib/elasticsearch
+sudo rm -rf /var/log/elasticsearch
+sudo rm -rf /etc/kibana
+sudo rm -rf /var/lib/kibana
+sudo rm -rf /var/log/kibana
+
+echo "✓ ELK Stack został całkowicie usunięty!"
 }
 
 function verify_installation() {
-	echo ""
-	echo "=== Weryfikacja instalacji ==="
-	
-	# Sprawdzenie Elasticsearch z użytkownikiem szkoleniowym
-	echo -n "Elasticsearch: "
-	if curl -s -u szkolenie:szkolenie http://localhost:9200 > /dev/null 2>&1; then
-		echo "✓ DZIAŁA"
-		curl -s -u szkolenie:szkolenie http://localhost:9200 | grep "cluster_name"
-	else
-		echo "✗ NIE ODPOWIADA"
-	fi
-	
-	# Sprawdzenie Kibana
-	echo -n "Kibana: "
-	if curl -s http://localhost:5601/api/status > /dev/null 2>&1; then
-		echo "✓ DZIAŁA"
-	else
-		echo "✗ NIE ODPOWIADA (może potrzebować więcej czasu)"
-	fi
-	
-	echo ""
-	echo "=== Status usług ==="
-	sudo systemctl status elasticsearch --no-pager -l | head -5
-	sudo systemctl status kibana --no-pager -l | head -5
+echo ""
+echo "=== Weryfikacja instalacji ==="
+
+# Sprawdzenie Elasticsearch z użytkownikiem szkoleniowym
+echo -n "Elasticsearch: "
+if curl -s -u szkolenie:szkolenie http://localhost:9200 > /dev/null 2>&1; then
+echo "✓ DZIAŁA"
+curl -s -u szkolenie:szkolenie http://localhost:9200 | grep "cluster_name"
+else
+echo "✗ NIE ODPOWIADA"
+fi
+
+# Sprawdzenie Kibana
+echo -n "Kibana: "
+if curl -s http://localhost:5601/api/status > /dev/null 2>&1; then
+echo "✓ DZIAŁA"
+else
+echo "✗ NIE ODPOWIADA (może potrzebować więcej czasu)"
+fi
+
+echo ""
+echo "=== Status usług ==="
+sudo systemctl status elasticsearch --no-pager -l | head -5
+sudo systemctl status kibana --no-pager -l | head -5
 }
 
 case "$1" in
-	--install)
-		install_elasticsearch
-		install_kibana
-		verify_installation
-		
-		SERVER_IP=$(hostname -I | awk '{print $1}')
-		
-		echo ""
-		echo "==================================================="
-		echo "           ELK Stack gotowy do użycia!            "
-		echo "==================================================="
-		echo ""
-		echo "Elasticsearch: http://$SERVER_IP:9200"
-		echo "Kibana:        http://$SERVER_IP:5601"
-		echo ""
-		echo "==================================================="
-		echo "        DANE LOGOWANIA DLA UCZESTNIKÓW:           "
-		echo "==================================================="
-		echo "    Login:    szkolenie"
-		echo "    Hasło:    szkolenie"
-		echo "==================================================="
-		echo ""
-		echo "UWAGA: Kibana może potrzebować 1-2 minuty na pełne uruchomienie"
-		echo ""
-		;;
-	--remove)
-		remove_elk
-		;;
-	*)
-		echo "Użycie: $0 --install | --remove"
-		exit 1
-		;;
+--install)
+install_elasticsearch
+install_kibana
+verify_installation
+
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
+echo ""
+echo "==================================================="
+echo " ELK Stack gotowy do użycia! "
+echo "==================================================="
+echo ""
+echo "Elasticsearch: http://$SERVER_IP:9200"
+echo "Kibana: http://$SERVER_IP:5601"
+echo ""
+echo "==================================================="
+echo " DANE LOGOWANIA DLA UCZESTNIKÓW: "
+echo "==================================================="
+echo " Login: szkolenie"
+echo " Hasło: szkolenie"
+echo "==================================================="
+echo ""
+echo "UWAGA: Kibana może potrzebować 1-2 minuty na pełne uruchomienie"
+echo ""
+;;
+
+--remove)
+remove_elk
+;;
+
+*)
+echo "Użycie: $0 --install | --remove"
+exit 1
+;;
 esac
 ```
-
 ---
 
 ## Wyjaśnienie funkcji install_elasticsearch()
