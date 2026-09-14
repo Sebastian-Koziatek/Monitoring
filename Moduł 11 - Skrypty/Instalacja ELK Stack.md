@@ -117,12 +117,9 @@ EOF
 	echo "(zapisz w bezpiecznym miejscu)"
 	echo ""
 	
-	# Zapisanie haseł do plików
-	echo "$KIBANA_PASSWORD" | sudo tee /etc/kibana/kibana-password.txt > /dev/null
-	sudo chmod 600 /etc/kibana/kibana-password.txt
-	sudo chown kibana:kibana /etc/kibana/kibana-password.txt
-	
+	# Zapisanie hasła elastic do pliku tymczasowego
 	echo "$ELASTIC_PASSWORD" | sudo tee /tmp/elastic-admin-pass.txt > /dev/null
+	echo "$KIBANA_PASSWORD" | sudo tee /tmp/kibana-system-pass.txt > /dev/null
 }
 
 function install_kibana() {
@@ -131,8 +128,8 @@ function install_kibana() {
 	# Krok 1: Instalacja Kibana (repozytorium już dodane przez Elasticsearch)
 	sudo apt-get install -y kibana
 	
-	# Krok 2: Pobranie hasła Kibana
-	KIBANA_PASSWORD=$(sudo cat /etc/kibana/kibana-password.txt)
+	# Krok 2: Pobranie hasła Kibana z pliku tymczasowego
+	KIBANA_PASSWORD=$(sudo cat /tmp/kibana-system-pass.txt)
 	
 	# Krok 3: Generowanie encryption key dla Kibana (wymagane dla Fleet)
 	ENCRYPTION_KEY=$(openssl rand -hex 32)
@@ -401,12 +398,22 @@ curl -X POST "http://localhost:9200/_security/user/szkolenie" \
 ### Zapisanie haseł
 
 ```bash
-echo "$KIBANA_PASSWORD" | sudo tee /etc/kibana/kibana-password.txt > /dev/null
-sudo chmod 600 /etc/kibana/kibana-password.txt
-sudo chown kibana:kibana /etc/kibana/kibana-password.txt
+echo "$ELASTIC_PASSWORD" | sudo tee /tmp/elastic-admin-pass.txt > /dev/null
+echo "$KIBANA_PASSWORD" | sudo tee /tmp/kibana-system-pass.txt > /dev/null
 ```
 
-Zapisujemy hasło `kibana_system` do pliku, który później użyjemy w konfiguracji Kibany.
+Zapisujemy hasła do plików tymczasowych w `/tmp/`:
+- **elastic-admin-pass.txt**: Hasło administratora (dla awaryjnego dostępu)
+- **kibana-system-pass.txt**: Hasło dla użytkownika `kibana_system` (do połączenia Kibana→ES)
+
+**Dlaczego `/tmp/` a nie `/etc/kibana/`?**
+- W tym momencie pakiet Kibana NIE JEST JESZCZE ZAINSTALOWANY
+- Katalog `/etc/kibana/` nie istnieje (powstanie dopiero po `apt-get install kibana`)
+- Gdybyśmy teraz próbowali zapisać do `/etc/kibana/`, dostalibyśmy błąd:
+  ```
+  tee: /etc/kibana/kibana-password.txt: No such file or directory
+  ```
+- Hasło zostanie skopiowane do właściwej lokalizacji w funkcji `install_kibana()` po instalacji pakietu
 
 ---
 
@@ -423,10 +430,12 @@ Używa tego samego repozytorium co Elasticsearch (już dodanego wcześniej).
 ### Pobranie hasła Kibana
 
 ```bash
-KIBANA_PASSWORD=$(sudo cat /etc/kibana/kibana-password.txt)
+KIBANA_PASSWORD=$(sudo cat /tmp/kibana-system-pass.txt)
 ```
 
-Odczytujemy hasło użytkownika `kibana_system` zapisane wcześniej przez funkcję `install_elasticsearch()`.
+Odczytujemy hasło użytkownika `kibana_system` z pliku tymczasowego utworzonego wcześniej przez funkcję `install_elasticsearch()`.
+
+**UWAGA:** Nie możemy odczytać tego z `/etc/kibana/` w funkcji `install_elasticsearch()`, bo ten katalog nie istnieje przed instalacją pakietu Kibana. Dlatego używamy `/tmp/`.
 
 ### Generowanie encryption key
 
