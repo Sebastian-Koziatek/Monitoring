@@ -6,6 +6,37 @@ To repozytorium zawiera kompleksowe materiały szkoleniowe dotyczące **monitori
 
 ---
 
+## ⚠️ ZASADY PRACY Z GIT I GITHUB
+
+**KRYTYCZNE**: Nie wolno wykonywać ŻADNYCH operacji git/GitHub bez wyraźnej prośby użytkownika:
+
+### ZABRONIONE bez wyraźnego polecenia:
+- ❌ `git push` - wypychanie zmian na GitHub
+- ❌ `git commit` - commitowanie zmian
+- ❌ `git add` - dodawanie plików do stage
+- ❌ Tworzenie/usuwanie branchy
+- ❌ Merge/rebase
+- ❌ Operacje na remote repository
+
+### WYMAGANE POSTĘPOWANIE:
+1. **Po wykonaniu zmian w plikach** - ZATRZYMAJ SIĘ
+2. **Zapytaj użytkownika**: "Czy mam zacommitować i wypchnąć te zmiany na GitHub?"
+3. **Poczekaj na odpowiedź** - NIE zakładaj zgody
+4. **Dopiero po wyraźnej zgodzie** wykonaj operacje git
+5. **Nawet po zgodzie** - zapytaj o potwierdzenie przed `git push`
+
+**Przykład prawidłowego workflow:**
+- ✅ Zmieniłem pliki X, Y, Z. Czy mam zacommitować te zmiany?
+- ✅ [czekam na odpowiedź]
+- ✅ [po zgodzie] Czy wypchać zmiany na GitHub? (git push)
+
+**NIGDY:**
+- ❌ "Zatwierdź zmiany do git?" [i od razu robię git add/commit/push]
+- ❌ Zakładanie że użytkownik chce push
+- ❌ Automatyczne push po commit
+
+---
+
 ## Struktura repozytorium
 
 ```
