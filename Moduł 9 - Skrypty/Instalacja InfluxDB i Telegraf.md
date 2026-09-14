@@ -1,4 +1,4 @@
-# Skrypt instalacji InfluxDB 2.x i Telegraf
+szys# Skrypt instalacji InfluxDB 2.x i Telegraf
 
 ## Opis
 
